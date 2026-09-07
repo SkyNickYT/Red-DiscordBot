@@ -3,8 +3,7 @@ import datetime
 import json
 
 from collections import Counter, defaultdict
-from pathlib import Path
-from typing import Mapping
+from typing import Mapping, Dict
 
 import aiohttp
 import discord
@@ -13,16 +12,18 @@ from redbot.core import Config
 from redbot.core.bot import Red
 from redbot.core.commands import Cog
 from redbot.core.data_manager import cog_data_path
-from redbot.core.i18n import Translator, cog_i18n
+from redbot.core.utils.antispam import AntiSpam
 
-from ..utils import CacheLevel, PlaylistScope
+from ..utils import (
+    CacheLevel,
+    PlaylistScope,
+    DEFAULT_LAVALINK_YAML,
+    DEFAULT_LAVALINK_SETTINGS,
+)
 from . import abc, cog_utils, commands, events, tasks, utilities
 from .cog_utils import CompositeMetaClass
 
-_ = Translator("Audio", Path(__file__))
 
-
-@cog_i18n(_)
 class Audio(
     commands.Commands,
     events.Events,
@@ -31,14 +32,9 @@ class Audio(
     Cog,
     metaclass=CompositeMetaClass,
 ):
-    """Play audio through voice channels."""
-
-    _default_lavalink_settings = {
-        "host": "localhost",
-        "rest_port": 2333,
-        "ws_port": 2333,
-        "password": "youshallnotpass",
-    }
+    llset_captcha_intervals = [
+        (datetime.timedelta(days=1), 1),
+    ]
 
     def __init__(self, bot: Red):
         super().__init__()
@@ -46,7 +42,7 @@ class Audio(
         self.config = Config.get_conf(self, 2711759130, force_registration=True)
 
         self.api_interface = None
-        self.player_manager = None
+        self.managed_node_controller = None
         self.playlist_api = None
         self.local_folder_current_path = None
         self.db_conn = None
@@ -61,6 +57,7 @@ class Audio(
         self._dj_role_cache = {}
         self.skip_votes = {}
         self.play_lock = {}
+        self.antispam: Dict[int, Dict[str, AntiSpam]] = defaultdict(lambda: defaultdict(AntiSpam))
 
         self.lavalink_connect_task = None
         self._restore_task = None
@@ -70,7 +67,6 @@ class Audio(
         self.permission_cache = discord.Permissions(
             embed_links=True,
             read_messages=True,
-            send_messages=True,
             read_message_history=True,
             add_reactions=True,
         )
@@ -88,7 +84,7 @@ class Audio(
             "can_delete": False,
         }
         self._ll_guild_updates = set()
-        self._diconnected_shard = set()
+        self._disconnected_shard = set()
         self._last_ll_update = datetime.datetime.now(datetime.timezone.utc)
 
         default_global = dict(
@@ -107,7 +103,8 @@ class Audio(
             url_keyword_blacklist=[],
             url_keyword_whitelist=[],
             java_exc_path="java",
-            **self._default_lavalink_settings,
+            **DEFAULT_LAVALINK_YAML,
+            **DEFAULT_LAVALINK_SETTINGS,
         )
 
         default_guild = dict(

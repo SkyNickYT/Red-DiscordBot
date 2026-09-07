@@ -2,7 +2,7 @@ from typing import Tuple, Dict, Optional, List, Union
 from re import findall
 
 import discord
-from discord.ext.commands.view import StringView
+from discord.ext.commands.view import StringView  # DEP-WARN
 from redbot.core import commands, Config
 from redbot.core.i18n import Translator
 from redbot.core.utils import AsyncIter
@@ -59,15 +59,17 @@ class AliasEntry:
         extra = []
         while not view.eof:
             prev = view.index
-            word = view.get_quoted_word()
+            try:
+                word = view.get_quoted_word()
+            except discord.ext.commands.errors.UnexpectedQuoteError:
+                view.skip_ws()
+                continue
             if len(word) < view.index - prev:
                 word = "".join((view.buffer[prev], word, view.buffer[view.index - 1]))
-            extra.append(word)
-            view.skip_ws()
+            extra.append(word.strip(" "))
         return extra
 
     def to_json(self) -> dict:
-
         return {
             "name": self.name,
             "command": self.command,
@@ -91,7 +93,6 @@ class AliasCache:
         self._aliases: Dict[Optional[int], Dict[str, AliasEntry]] = {None: {}}
 
     async def anonymize_aliases(self, user_id: int):
-
         async with self.config.entries() as global_aliases:
             for a in global_aliases:
                 if a.get("creator", 0) == user_id:

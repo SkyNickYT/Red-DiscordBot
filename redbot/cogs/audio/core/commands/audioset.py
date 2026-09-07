@@ -1,6 +1,5 @@
 import asyncio
 import contextlib
-import logging
 import os
 import tarfile
 from pathlib import Path
@@ -9,22 +8,24 @@ from typing import Union
 
 import discord
 import lavalink
+from red_commons.logging import getLogger
 
 from redbot.core import bank, commands
 from redbot.core.data_manager import cog_data_path
 from redbot.core.i18n import Translator
 from redbot.core.utils.chat_formatting import box, humanize_number
-from redbot.core.utils.menus import DEFAULT_CONTROLS, menu, start_adding_reactions
+from redbot.core.utils.menus import menu, start_adding_reactions
 from redbot.core.utils.predicates import MessagePredicate, ReactionPredicate
+from redbot.core.utils.views import SetApiView
 
 from ...audio_dataclasses import LocalPath
 from ...converters import ScopeParser
 from ...errors import MissingGuild, TooManyMatches
-from ...utils import CacheLevel, PlaylistScope, has_internal_server
+from ...utils import CacheLevel, PlaylistScope, has_managed_server
 from ..abc import MixinMeta
 from ..cog_utils import CompositeMetaClass, PlaylistConverter, __version__
 
-log = logging.getLogger("red.cogs.Audio.cog.Commands.audioset")
+log = getLogger("red.cogs.Audio.cog.Commands.audioset")
 
 _ = Translator("Audio", Path(__file__))
 
@@ -78,7 +79,7 @@ class AudioSetCommands(MixinMeta, metaclass=CompositeMetaClass):
             )
 
     @command_audioset_perms_global_whitelist.command(name="list")
-    @commands.bot_has_permissions(add_reactions=True)
+    @commands.bot_can_react()
     async def command_audioset_perms_global_whitelist_list(self, ctx: commands.Context):
         """List all keywords added to the whitelist."""
         whitelist = await self.config.url_keyword_whitelist()
@@ -102,7 +103,7 @@ class AudioSetCommands(MixinMeta, metaclass=CompositeMetaClass):
             discord.Embed(title=_("Global Whitelist"), description=page, colour=embed_colour)
             for page in pages
         )
-        await menu(ctx, pages, DEFAULT_CONTROLS)
+        await menu(ctx, pages)
 
     @command_audioset_perms_global_whitelist.command(name="clear")
     async def command_audioset_perms_global_whitelist_clear(self, ctx: commands.Context):
@@ -172,7 +173,7 @@ class AudioSetCommands(MixinMeta, metaclass=CompositeMetaClass):
             )
 
     @command_audioset_perms_global_blacklist.command(name="list")
-    @commands.bot_has_permissions(add_reactions=True)
+    @commands.bot_can_react()
     async def command_audioset_perms_global_blacklist_list(self, ctx: commands.Context):
         """List all keywords added to the blacklist."""
         blacklist = await self.config.url_keyword_blacklist()
@@ -196,7 +197,7 @@ class AudioSetCommands(MixinMeta, metaclass=CompositeMetaClass):
             discord.Embed(title=_("Global Blacklist"), description=page, colour=embed_colour)
             for page in pages
         )
-        await menu(ctx, pages, DEFAULT_CONTROLS)
+        await menu(ctx, pages)
 
     @command_audioset_perms_global_blacklist.command(name="clear")
     async def command_audioset_perms_global_blacklist_clear(self, ctx: commands.Context):
@@ -268,7 +269,7 @@ class AudioSetCommands(MixinMeta, metaclass=CompositeMetaClass):
             )
 
     @command_audioset_perms_whitelist.command(name="list")
-    @commands.bot_has_permissions(add_reactions=True)
+    @commands.bot_can_react()
     async def command_audioset_perms_whitelist_list(self, ctx: commands.Context):
         """List all keywords added to the whitelist."""
         whitelist = await self.config.guild(ctx.guild).url_keyword_whitelist()
@@ -292,7 +293,7 @@ class AudioSetCommands(MixinMeta, metaclass=CompositeMetaClass):
             discord.Embed(title=_("Whitelist"), description=page, colour=embed_colour)
             for page in pages
         )
-        await menu(ctx, pages, DEFAULT_CONTROLS)
+        await menu(ctx, pages)
 
     @command_audioset_perms_whitelist.command(name="clear")
     async def command_audioset_perms_whitelist_clear(self, ctx: commands.Context):
@@ -361,7 +362,7 @@ class AudioSetCommands(MixinMeta, metaclass=CompositeMetaClass):
             )
 
     @command_audioset_perms_blacklist.command(name="list")
-    @commands.bot_has_permissions(add_reactions=True)
+    @commands.bot_can_react()
     async def command_audioset_perms_blacklist_list(self, ctx: commands.Context):
         """List all keywords added to the blacklist."""
         blacklist = await self.config.guild(ctx.guild).url_keyword_blacklist()
@@ -385,7 +386,7 @@ class AudioSetCommands(MixinMeta, metaclass=CompositeMetaClass):
             discord.Embed(title=_("Blacklist"), description=page, colour=embed_colour)
             for page in pages
         )
-        await menu(ctx, pages, DEFAULT_CONTROLS)
+        await menu(ctx, pages)
 
     @command_audioset_perms_blacklist.command(name="clear")
     async def command_audioset_perms_blacklist_clear(self, ctx: commands.Context):
@@ -453,7 +454,7 @@ class AudioSetCommands(MixinMeta, metaclass=CompositeMetaClass):
             await self.set_player_settings(ctx)
 
     @command_audioset_autoplay.command(name="playlist", usage="<playlist_name_OR_id> [args]")
-    @commands.bot_has_permissions(add_reactions=True)
+    @commands.bot_can_react()
     async def command_audioset_autoplay_playlist(
         self,
         ctx: commands.Context,
@@ -464,7 +465,7 @@ class AudioSetCommands(MixinMeta, metaclass=CompositeMetaClass):
         """Set a playlist to auto-play songs from.
 
         **Usage**:
-        ​ ​ ​ ​ `[p]audioset autoplay playlist_name_OR_id [args]`
+        ​ ​ ​ ​ `[p]audioset autoplay playlist playlist_name_OR_id [args]`
 
         **Args**:
         ​ ​ ​ ​ The following are all optional:
@@ -487,18 +488,16 @@ class AudioSetCommands(MixinMeta, metaclass=CompositeMetaClass):
         ​ ​ ​ ​ Exact guild name
 
         Example use:
-        ​ ​ ​ ​ `[p]audioset autoplay MyGuildPlaylist`
-        ​ ​ ​ ​ `[p]audioset autoplay MyGlobalPlaylist --scope Global`
-        ​ ​ ​ ​ `[p]audioset autoplay PersonalPlaylist --scope User --author Draper`
+        ​ ​ ​ ​ `[p]audioset autoplay playlist MyGuildPlaylist`
+        ​ ​ ​ ​ `[p]audioset autoplay playlist MyGlobalPlaylist --scope Global`
+        ​ ​ ​ ​ `[p]audioset autoplay playlist PersonalPlaylist --scope User --author Draper`
         """
         if self.playlist_api is None:
             return await self.send_embed_msg(
                 ctx,
                 title=_("Playlists Are Not Available"),
                 description=_("The playlist section of Audio is currently unavailable"),
-                footer=discord.Embed.Empty
-                if not await self.bot.is_owner(ctx.author)
-                else _("Check your logs."),
+                footer=None if not await self.bot.is_owner(ctx.author) else _("Check your logs."),
             )
         if scope_data is None:
             scope_data = [None, ctx.author, ctx.guild, False]
@@ -760,9 +759,17 @@ class AudioSetCommands(MixinMeta, metaclass=CompositeMetaClass):
         """Set a price for queueing tracks for non-mods, 0 to disable."""
         if price < 0:
             return await self.send_embed_msg(
-                ctx, title=_("Invalid Price"), description=_("Price can't be less than zero.")
+                ctx,
+                title=_("Invalid Price"),
+                description=_("Price can't be less than zero."),
             )
-        if price == 0:
+        elif price > 2**63 - 1:
+            return await self.send_embed_msg(
+                ctx,
+                title=_("Invalid Price"),
+                description=_("Price can't be greater than 2^63 - 1."),
+            )
+        elif price == 0:
             jukebox = False
             await self.send_embed_msg(
                 ctx, title=_("Setting Changed"), description=_("Jukebox mode disabled.")
@@ -782,7 +789,7 @@ class AudioSetCommands(MixinMeta, metaclass=CompositeMetaClass):
 
     @command_audioset.command(name="localpath")
     @commands.is_owner()
-    @commands.bot_has_permissions(add_reactions=True)
+    @commands.bot_can_react()
     async def command_audioset_localpath(self, ctx: commands.Context, *, local_path=None):
         """Set the localtracks path if the Lavalink.jar is not run from the Audio data folder.
 
@@ -1117,33 +1124,54 @@ class AudioSetCommands(MixinMeta, metaclass=CompositeMetaClass):
             if global_data["use_external_lavalink"]
             else _("Disabled"),
         )
-        if is_owner and not global_data["use_external_lavalink"] and self.player_manager.ll_build:
+        if (
+            is_owner
+            and not global_data["use_external_lavalink"]
+            and self.managed_node_controller.ll_version
+        ):
             msg += _(
-                "Lavalink build:         [{llbuild}]\n"
+                "Lavalink version:       [{llversion}]\n"
                 "Lavalink branch:        [{llbranch}]\n"
                 "Release date:           [{build_time}]\n"
                 "Lavaplayer version:     [{lavaplayer}]\n"
                 "Java version:           [{jvm}]\n"
                 "Java Executable:        [{jv_exec}]\n"
+                "Initial Heapsize:       [{xms}]\n"
+                "Max Heapsize:           [{xmx}]\n"
             ).format(
-                build_time=self.player_manager.build_time,
-                llbuild=self.player_manager.ll_build,
-                llbranch=self.player_manager.ll_branch,
-                lavaplayer=self.player_manager.lavaplayer,
-                jvm=self.player_manager.jvm,
-                jv_exec=self.player_manager.path,
+                build_time=self.managed_node_controller.build_time,
+                llversion=self.managed_node_controller.ll_version,
+                llbranch=self.managed_node_controller.ll_branch,
+                lavaplayer=self.managed_node_controller.lavaplayer,
+                jvm=self.managed_node_controller.jvm,
+                jv_exec=self.managed_node_controller.path,
+                xms=global_data["java"]["Xms"],
+                xmx=global_data["java"]["Xmx"],
             )
         if is_owner:
             msg += _("Localtracks path:       [{localpath}]\n").format(**global_data)
+
+        if (
+            is_owner
+            and not global_data["use_external_lavalink"]
+            and self.managed_node_controller.plugins
+        ):
+            plugins = self.managed_node_controller.plugins
+            msg += f"\n---{_('Lavalink Plugin Versions')}---"
+            plugin_name_max_len = 0
+            for plugin_name, __ in plugins.items():
+                plugin_name_max_len = max(plugin_name_max_len, len(plugin_name))
+            for plugin_name, plugin_version in plugins.items():
+                key = f"{plugin_name}:".ljust(plugin_name_max_len + 5)
+                msg += f"\n{key} [{plugin_version}]"
 
         await self.send_embed_msg(ctx, description=box(msg, lang="ini"))
 
     @command_audioset.command(name="logs")
     @commands.is_owner()
-    @has_internal_server()
-    @commands.guild_only()
+    @has_managed_server()
     async def command_audioset_logs(self, ctx: commands.Context):
-        """Sends the Lavalink server logs to your DMs."""
+        """Sends the managed Lavalink node logs to your DMs."""
         datapath = cog_data_path(raw_name="Audio")
         logs = datapath / "logs" / "spring.log"
         zip_name = None
@@ -1253,26 +1281,38 @@ class AudioSetCommands(MixinMeta, metaclass=CompositeMetaClass):
             "6. Click on Create Credential at the top.\n"
             '7. At the top click the link for "API key".\n'
             "8. No application restrictions are needed. Click Create at the bottom.\n"
-            "9. You now have a key to add to `{prefix}set api youtube api_key <your_api_key_here>`"
-        ).format(prefix=ctx.prefix)
-        await ctx.maybe_send_embed(message)
+            "9. Click the button below this message and set your API key"
+            " with the data shown in Google Developers Console."
+        )
+        await ctx.send(
+            message,
+            view=SetApiView(default_service="youtube", default_keys={"api_key": ""}),
+        )
 
     @command_audioset.command(name="spotifyapi")
     @commands.is_owner()
     async def command_audioset_spotifyapi(self, ctx: commands.Context):
         """Instructions to set the Spotify API tokens."""
         message = _(
-            "1. Go to Spotify developers and log in with your Spotify account.\n"
-            "(https://developer.spotify.com/dashboard/applications)\n"
-            '2. Click "Create An App".\n'
-            "3. Fill out the form provided with your app name, etc.\n"
-            '4. When asked if you\'re developing commercial integration select "No".\n'
-            "5. Accept the terms and conditions.\n"
-            "6. Copy your client ID and your client secret into:\n"
-            "`{prefix}set api spotify client_id <your_client_id_here> "
-            "client_secret <your_client_secret_here>`"
-        ).format(prefix=ctx.prefix)
-        await ctx.maybe_send_embed(message)
+            "1. Go to Spotify for Developers and log in with your Spotify account."
+            " If this is your first time, you'll be asked to accept the terms and conditions.\n"
+            "(https://developer.spotify.com/dashboard)\n"
+            '2. Click "Create app".\n'
+            "3. Fill out the form provided with your app name and description."
+            " These can be anything you want. Website field can be left empty.\n"
+            "4. Add `https://localhost` to your Redirect URIs. This will not be used"
+            " but is required when filling out the form.\n"
+            '5. Select "Web API" when asked which API/SDKs you are planning to use.\n'
+            "6. Confirm that you agree to the terms and conditions and save the application.\n"
+            "7. Click the button below this message and set your client ID and your client secret"
+            " with the data shown in Spotify's dashboard."
+        )
+        await ctx.send(
+            message,
+            view=SetApiView(
+                default_service="spotify", default_keys={"client_id": "", "client_secret": ""}
+            ),
+        )
 
     @command_audioset.command(name="countrycode")
     @commands.guild_only()
@@ -1448,11 +1488,17 @@ class AudioSetCommands(MixinMeta, metaclass=CompositeMetaClass):
     async def command_audioset_restart(self, ctx: commands.Context):
         """Restarts the lavalink connection."""
         async with ctx.typing():
-            await lavalink.close(self.bot)
-            if self.player_manager is not None:
-                await self.player_manager.shutdown()
-
-            self.lavalink_restart_connect()
+            try:
+                await lavalink.close(self.bot)
+                self.lavalink_restart_connect(manual=True)
+            except ProcessLookupError:
+                await self.send_embed_msg(
+                    ctx,
+                    title=_("Failed To Shutdown Lavalink Node"),
+                    description=_("Please reload Audio (`{prefix}reload audio`).").format(
+                        prefix=ctx.prefix
+                    ),
+                )
 
             await self.send_embed_msg(
                 ctx,

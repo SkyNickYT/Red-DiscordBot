@@ -43,6 +43,8 @@ gettext:
 upload_translations:
 	crowdin upload sources
 download_translations:
+	# get rid of any files that are no longer on Crowdin
+	find -name '*.po' -delete 
 	crowdin download
 
 # Dependencies
@@ -52,7 +54,7 @@ bumpdeps:
 # Development environment
 newenv:
 	$(PYTHON) -m venv --clear .venv
-	.venv/bin/pip install -U pip setuptools wheel
+	.venv/bin/pip install -U pip wheel
 	$(MAKE) syncenv
 syncenv:
 	.venv/bin/pip install -Ur ./tools/dev-requirements.txt
