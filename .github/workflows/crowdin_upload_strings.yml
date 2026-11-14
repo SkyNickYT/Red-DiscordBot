@@ -4,12 +4,18 @@ on:
     branches:
       - V3/develop
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
+    name: Upload translation sources to Crowdin
     if: github.repository == 'Cog-Creators/Red-DiscordBot'
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v7
+      with:
+        persist-credentials: false
     - name: Set up Python
       uses: actions/setup-python@v7
       with:

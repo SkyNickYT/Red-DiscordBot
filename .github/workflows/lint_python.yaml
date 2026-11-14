@@ -9,6 +9,9 @@ on:
 env:
   ref: ${{ github.event.client_payload.ref || '' }}
 
+permissions:
+  contents: read
+
 jobs:
   lint_python:
     name: Lint Python
@@ -17,6 +20,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ env.ref }}
+          persist-credentials: false
       - uses: actions/setup-python@v7
         with:
           python-version: "3.8"

@@ -3,6 +3,9 @@ name: Generate requirements files with pip-compile.
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   generate_requirements:
     name: Generate requirements files for ${{ matrix.os }} platform.
@@ -16,6 +19,8 @@ jobs:
     steps:
       - name: Checkout the repository.
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -60,6 +65,8 @@ jobs:
     steps:
       - name: Checkout the repository.
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v7
